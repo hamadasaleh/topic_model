@@ -40,7 +40,4 @@ class Corpus:
 
         return paths
 
-if __name__ == '__main__':
-    docs_path = Path("C:/Users/hamad/Documents/datasets/20news-bydate-train")
-    nlp = spacy.load("en_core_web_sm", exclude=["ner"])
-    train_corpus = Corpus(docs_path, nlp, limit=1000)
+
