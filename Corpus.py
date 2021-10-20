@@ -1,6 +1,3 @@
-from pathlib import Path
-
-import spacy
 from collections import Counter
 from tqdm import tqdm
 
