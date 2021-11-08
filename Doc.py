@@ -17,7 +17,6 @@ class Doc:
         """
 
         :param tok2idx: (dict)
-        :param is_test: (bool)
         :return:
         sparse_counts (np.array) -> document represented as an array of token counts
         """

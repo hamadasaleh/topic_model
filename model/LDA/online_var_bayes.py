@@ -3,8 +3,6 @@ from scipy.special import softmax
 
 from tqdm import tqdm
 
-from metrics.metrics_elbo import ell
-
 from metrics.metrics_expectations import E_log_theta, E_log_beta
 
 
@@ -23,49 +21,32 @@ def online_var_bayes(train_corpus, K, W, alpha, eta, tau_0, kappa, batch_size) -
     """
     lam = np.random.rand(K, W)
     D = len(train_corpus)
-    phi_batch = np.zeros((batch_size, K, W))
-    n_batch = np.zeros((batch_size, 1, W))
     N = D // batch_size
-    L = []
-    batch_count = 0
+    N = N if D % batch_size == 0 else N+1
+    t = 0
 
-    with tqdm(total=D, position=1, leave=None, desc="TRAIN") as pbar:
+    batch_idx = np.array_split(np.arange(D), N)
 
-        for t, doc in enumerate(train_corpus.docs):
+    with tqdm(total=N, position=1, leave=None, desc="TRAIN") as pbar:
+
+        for t_batch in batch_idx:
             # document info
-            n_t = doc.get_counts_array(tok2idx=train_corpus.vocab.tok2idx)
+            n_t = train_corpus.get_batch_counts(list(t_batch))
 
             # parameter optimization
             # E
             phi_t, gamma_t = E_step(lam=lam, alpha=alpha, n_t=n_t)
 
             # M
+            t += len(batch_idx)
             rho_t = rho(tau_0, t, kappa)
-            phi_batch[batch_count] = phi_t[None, :]
-            n_batch[batch_count] = n_t[None, :]
-            batch_count += 1
+            lam = M_step(lam, eta, D, phi_t, n_t, rho_t)
 
-            if t in range(0, N*batch_size + 1, batch_size) or t == D-1:
-
-                B = batch_size if t in range(0, N*batch_size + 1, batch_size) else D - N*batch_size
-                lam_tilde = eta + (D/B) * (phi_batch * n_batch).sum(axis=0)
-                lam = (1. - rho_t) * lam + rho_t * lam_tilde
-
-                # ELBO: lower bound on log likelihood
-                ell_t = ell(n_t, phi_t, gamma_t, lam, alpha, eta, D)
-                L.append(ell_t)
-
-                # reset
-                batch_count = 0
-                phi_batch = np.zeros((batch_size, K, W))
-            else:
-                continue
+            # TODO: ELBO: lower bound on log likelihood
 
             pbar.update()
 
-    ELBO = sum(L)
-
-    return lam, ELBO
+    return lam
 
 
 def E_step(lam, alpha, n_t, tol=1e-5):
@@ -74,25 +55,43 @@ def E_step(lam, alpha, n_t, tol=1e-5):
 
     :param lam: (K, W)
     :param alpha: float
-    :param n_t: (W,)
+    :param n_t: (S, W, 1)
     :param tol: float
-    :return: phi_t (K, W), gamma_t (K, 1)
+    :return: phi_t (S, K, W), gamma_t (S, K, 1)
     """
     K = lam.shape[0]
-    gamma = np.ones((K, 1))
+    S = n_t.shape[0]
+    gamma_save = np.empty((S, K, 1))
+    gamma = np.ones_like(gamma_save)
 
-    while True:
-        phi_t = softmax(E_log_theta(gamma) + E_log_beta(lam), axis=0)
-        #TESTING
-        assert phi_t.shape == lam.shape
+    idx = np.arange(S)
 
-        gamma_t = alpha + phi_t @ n_t
+    with tqdm(total=S, position=2, leave=None, desc="BATCH") as pbar:
 
-        err = np.mean(np.abs(gamma_t - gamma))
-        if err > tol:
-            gamma = gamma_t
-        else:
-            return phi_t, gamma_t
+        while True:
+            phi_t = softmax(E_log_theta(gamma) + E_log_beta(lam)[None, :, :], axis=1)
+
+            gamma_t = alpha + phi_t @ n_t[idx, :, :]
+
+            err = np.mean(np.abs(gamma_t - gamma), axis=1).flatten()
+            cv_flag = err < tol
+
+            if idx.size != 0:
+                if all(~cv_flag):
+                    gamma = np.copy(gamma_t)
+                else:
+                    # save
+                    to_save = idx[cv_flag]
+                    gamma_save[to_save, :, :] = gamma_t[cv_flag, :, :]
+
+                    # to update~
+                    gamma = gamma_t[~cv_flag, :, :]
+                    idx = idx[~cv_flag]
+
+                    pbar.update(n=cv_flag.sum())
+            else:
+                phi_save = softmax(E_log_theta(gamma_save) + E_log_beta(lam)[None, :, :], axis=1)
+                return phi_save, gamma_save
 
 def M_step(lam, eta, D, phi_t, n_t, rho_t):
     """
@@ -101,14 +100,14 @@ def M_step(lam, eta, D, phi_t, n_t, rho_t):
     :param lam: (K, W)
     :param eta: float
     :param D: float number of docs in train set
-    :param phi_t: (K, W) variational topic index distribution
-    :param n_t: (W,) word count array
+    :param phi_t: (S, K, W) variational topic index distribution
+    :param n_t: (S, W, 1) word count array
     :param tau_0: float
     :param t: int
     :param kappa: float
     :return: lam (K, W)
     """
-    lam_tilde = eta + D * phi_t * n_t
+    lam_tilde = eta + D * (phi_t * n_t.swapaxes(1, 2)).mean(axis=0)
     lam = (1. - rho_t) * lam + rho_t * lam_tilde
     return lam
 

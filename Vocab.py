@@ -8,6 +8,9 @@ class Vocab:
         self.tok2idx = self.get_tok2idx()
         self.idx2tok = {idx: token for token,idx in self.tok2idx.items()}
 
+    def __len__(self):
+        return len(self.tok2idx)
+
     def get_tok2idx(self):
         vocab = [token for token, freq in self.corpus_freq.items() if token not in self.stop_words]
         return {token: i for i, token in enumerate(vocab)}

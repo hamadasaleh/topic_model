@@ -6,6 +6,8 @@ from scipy.stats import dirichlet
 from model.LDA.online_var_bayes import online_var_bayes, E_step
 
 
+
+
 class TopicModel:
 
     def __init__(self,
@@ -36,7 +38,7 @@ class TopicModel:
 
 
     def fit(self, train_corpus):
-        self.lam, ELBO = online_var_bayes(train_corpus=train_corpus,
+        self.lam = online_var_bayes(train_corpus=train_corpus,
                                     K=self.K,
                                     W=self.W,
                                     alpha=self.alpha,
@@ -46,7 +48,7 @@ class TopicModel:
                                     batch_size=self.batch_size)
         # posterior distribution of the topics
         self.q_beta_hat = self.get_q_beta_hat()
-        return ELBO
+
 
     def fit_doc_params(self, doc, train_corpus):
         # homemade Corpus and Doc
@@ -68,17 +70,27 @@ class TopicModel:
         return z_hat, q_theta_hat
 
     def get_q_beta_hat(self):
-        q_beta_hat = np.stack([dirichlet.rvs(alpha=self.lam[k], random_state=self.seed).squeeze()
-                               for k in range(self.lam.shape[0])],
-                              axis=0)
+        try:
+            q_beta_hat = np.stack([dirichlet.rvs(alpha=self.lam[k], random_state=self.seed).squeeze()
+                                   for k in range(self.lam.shape[0])],
+                                  axis=0)
+        except:
+            pass
 
         return q_beta_hat
 
     def load_lambda(self, path):
-        with open( path, 'rb') as f:
+        with open(path, 'rb') as f:
             return np.load(f)
 
-    def save_model(self, model_dir):
+    def save_lambda(self, model_dir):
         save_path = model_dir / 'lam.npy'
         with open(save_path, 'wb') as f:
             np.save(f, self.lam)
+
+    def save_model(self, model_dir):
+        import dill
+        save_path = model_dir / 'MODEL.pkl'
+        with open(save_path, 'wb') as f:
+            dill.dump(self, file=f)
+
