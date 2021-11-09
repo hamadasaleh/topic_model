@@ -58,7 +58,7 @@ if __name__ == '__main__':
         train_corpus = Corpus(dir=Path(config['data_paths']['train']),
                               nlp=nlp,
                               freq_cutoff=int(config['corpus_params']['freq_cutoff']),
-                              limit=40)
+                              limit=-1)
         # save train_corpus
         corpus_save_path = exp_dir / 'train_corpus.pkl'
         with open(corpus_save_path, 'wb') as f:
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     test_corpus = Corpus(dir=test_dir,
                          nlp=train_corpus.nlp,
                          vocab=train_corpus.vocab,
-                         limit=40)
+                         limit=-1)
 
     # hyperparameters
     params = config['model_params']
