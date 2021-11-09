@@ -98,7 +98,7 @@ if __name__ == '__main__':
                         topic_model.fit(train_corpus)
 
                         # test
-                        test_batch_size = 16
+                        test_batch_size = 256
                         D = len(test_corpus)
                         N = D // test_batch_size
                         N = N if D % test_batch_size == 0 else N + 1
