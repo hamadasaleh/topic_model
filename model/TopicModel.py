@@ -1,10 +1,12 @@
-from typing import Union
+import json
+from pathlib import Path
+from typing import Union, Tuple, List
 import numpy as np
 
 from scipy.stats import dirichlet
 
 from model.LDA.online_var_bayes import online_var_bayes, E_step
-
+from metrics.metrics_perplexity import doc_diff, perplexity
 
 
 
@@ -17,7 +19,8 @@ class TopicModel:
                  eta: Union[float, np.array],
                  tau_0: float,
                  kappa: float,
-                 lam = None,
+                 D: int,
+                 lam: np.array = None,
                  batch_size: int = 1,
                  seed: int = 0):
         self.seed = seed
@@ -27,8 +30,13 @@ class TopicModel:
         self.eta = eta
         self.tau_0 = tau_0
         self.kappa = kappa
+        self.D = D
         if lam is not None:
-            self.lam = self.load_lambda(lam)
+            if isinstance(lam, str):
+                self.lam = self.load_lambda(lam)
+            elif isinstance(lam, np.ndarray):
+                self.lam = lam
+            # TODO:
             self.q_beta_hat = self.get_q_beta_hat()
         else:
             self.lam = lam
@@ -37,60 +45,107 @@ class TopicModel:
         super().__init__()
 
 
-    def fit(self, train_corpus):
-        self.lam = online_var_bayes(train_corpus=train_corpus,
-                                    K=self.K,
+    def fit(self, train_corpus: "Corpus", nlp: "Language"):
+        batches = train_corpus(nlp, self.batch_size)
+        self.lam = online_var_bayes(batches=batches,
+                                    D=self.D,
                                     W=self.W,
+                                    K=self.K,
                                     alpha=self.alpha,
                                     eta=self.eta,
                                     tau_0=self.tau_0,
-                                    kappa=self.kappa,
-                                    batch_size=self.batch_size)
+                                    kappa=self.kappa)
         # posterior distribution of the topics
         self.q_beta_hat = self.get_q_beta_hat()
 
+    def predict_corpus(self, corpus: "Corpus", nlp: "Language") -> Tuple[List[List], List[dirichlet]]:
+        batches = corpus(nlp, self.batch_size)
+        z_hat_corpus = []
+        q_theta_hat_corpus = []
 
-    def fit_doc_params(self, doc, train_corpus):
-        # homemade Corpus and Doc
-        n_t = doc.get_counts_array(tok2idx=train_corpus.vocab.tok2idx)
+        for n_t in batches:
+            z_hat, q_theta_hat = self.predict_doc(n_t)
+            z_hat_corpus.extend(z_hat)
+            q_theta_hat_corpus.extend(q_theta_hat)
 
-        # parameter optimization
-        phi_t, gamma_t = E_step(self.lam, self.alpha, n_t)
-
-        return phi_t, gamma_t, n_t
+        return z_hat_corpus, q_theta_hat_corpus
 
 
-    def predict(self, phi_t, gamma_t):
-        # topic assignments
-        z_hat = phi_t.argmax(axis=0)
 
-        # topic proportions
-        q_theta_hat = dirichlet.rvs(alpha=gamma_t, random_state=self.seed)
+    def predict_doc(self, n_t: np.array) -> Tuple[List[int], List[dirichlet]] :
+        """
 
+        :param n_t: (batch_size, n_topics, vocab_size)
+        :return:
+        """
+        # fit per document parameters
+        phi_t, gamma_t = E_step(lam=self.lam, alpha=self.alpha, n_t=n_t)
+
+        # topic assignments: e.g. this word comes from that topic
+        z_hat = phi_t.argmax(axis=1).tolist()
+
+        # topic proportions:
+        # e.g. q_theta_hat[0] represents the influence of topic 0 on given document
+        # if q_theta_hat[0] = 20% you could interpret it as "20% of what is discussed in the document concerns that
+        # topic"
+        q_theta_hat = [dirichlet(alpha=conc, seed=self.seed) for conc in gamma_t.squeeze()]
         return z_hat, q_theta_hat
 
-    def get_q_beta_hat(self):
-        try:
-            q_beta_hat = np.stack([dirichlet.rvs(alpha=self.lam[k], random_state=self.seed).squeeze()
-                                   for k in range(self.lam.shape[0])],
-                                  axis=0)
-        except:
-            pass
+    def predict_score_batch(self, n_t: np.array) -> Tuple[np.array, float]:
+        phi_t, gamma_t = self.fit_doc_params(n_t)
+        diff = doc_diff(n_d=n_t, gamma_d=gamma_t, phi_d=phi_t, lam=self.lam, alpha=self.alpha)
+        n_sum = n_t.sum()
+        return diff, n_sum
 
+    def fit_doc_params(self, n_t: np.array):
+        phi_t, gamma_t = E_step(lam=self.lam, alpha=self.alpha, n_t=n_t)
+        return phi_t, gamma_t
+
+    def get_q_beta_hat(self):
+        """Variational topics"""
+        q_beta_hat = np.stack([dirichlet.rvs(alpha=self.lam[k], random_state=self.seed).squeeze()
+                               for k in range(self.lam.shape[0])],
+                              axis=0)
         return q_beta_hat
 
-    def load_lambda(self, path):
-        with open(path, 'rb') as f:
-            return np.load(f)
+    def get_q_theta_hat(self, gamma_t: np.array) -> np.array:
+        """Variational topic proportions"""
+        q_theta_hat = dirichlet.rvs(alpha=gamma_t, random_state=self.seed).squeeze()
+        return q_theta_hat
 
-    def save_lambda(self, model_dir):
+    def load_lambda(self, lam_path: Union[str, Path]):
+        with open(lam_path, 'rb') as f:
+            lam = np.load(f)
+        return lam
+
+    def save_lambda(self, model_dir: Union[str, Path]) -> None:
         save_path = model_dir / 'lam.npy'
         with open(save_path, 'wb') as f:
             np.save(f, self.lam)
+
+    def save_params(self, params_dict: dict, model_dir: Union[str, Path]):
+        with open(model_dir / "params.json", "wb") as f:
+            json.dump(params_dict, f)
 
     def save_model(self, model_dir):
         import dill
         save_path = model_dir / 'MODEL.pkl'
         with open(save_path, 'wb') as f:
             dill.dump(self, file=f)
+
+    def to_disk(self, model_dir: Union[str, Path]) -> None:
+        model_dir = Path(model_dir)
+        params_dict = self.__dict__
+        json.dump(params_dict)
+        self.save_lambda(model_dir)
+
+    def from_disk(self, model_dir: Union[str, Path]) -> "TopicModel":
+        model_dir = Path(model_dir)
+
+        params_path = model_dir / "params.json"
+        self.__dict__ = json.load(params_path)
+
+        lam_path = model_dir / 'lam.npy'
+        self.lam = self.load_lambda(lam_path)
+        return self
 

@@ -1,3 +1,5 @@
+from typing import Iterable, Union
+
 import numpy as np
 from scipy.special import softmax
 
@@ -6,10 +8,12 @@ from tqdm import tqdm
 from metrics.metrics_expectations import E_log_theta, E_log_beta
 
 
-def online_var_bayes(train_corpus, K, W, alpha, eta, tau_0, kappa, batch_size) -> np.array:
+def online_var_bayes(batches: Iterable[np.array], D: int, W: int, K: int, alpha: float, eta: float, tau_0: float, kappa: int) -> np.array:
     """
     Online variational inference for LDA
 
+    :param batches:
+    :param D:
     :param train_corpus: Corpus
     :param K: number of topics
     :param W: vocabulary size
@@ -20,36 +24,27 @@ def online_var_bayes(train_corpus, K, W, alpha, eta, tau_0, kappa, batch_size) -
     :return: lam np.array
     """
     lam = np.random.rand(K, W)
-    D = len(train_corpus)
-    N = D // batch_size
-    N = N if D % batch_size == 0 else N+1
     t = 0
 
-    batch_idx = np.array_split(np.arange(D), N)
-
-    with tqdm(total=N, position=1, leave=None, desc="TRAIN") as pbar:
-
-        for t_batch in batch_idx:
-            # document info
-            n_t = train_corpus.get_batch_counts(list(t_batch))
-
+    with tqdm(total=D, position=1, leave=None, desc="TRAIN") as pbar:
+        for n_t in batches:
             # parameter optimization
             # E
             phi_t, gamma_t = E_step(lam=lam, alpha=alpha, n_t=n_t)
 
             # M
-            t += len(batch_idx)
+            t += n_t.shape[0]
             rho_t = rho(tau_0, t, kappa)
             lam = M_step(lam, eta, D, phi_t, n_t, rho_t)
 
             # TODO: ELBO: lower bound on log likelihood
 
-            pbar.update()
+            pbar.update(n_t.shape[0])
 
     return lam
 
 
-def E_step(lam, alpha, n_t, tol=1e-5):
+def E_step(lam: np.array, alpha: Union[float, np.array], n_t: np.array, tol: float = 1e-5):
     """
     E step - iterative update of document parameters gamma and phi until convergence
 
@@ -65,11 +60,12 @@ def E_step(lam, alpha, n_t, tol=1e-5):
     gamma = np.ones_like(gamma_save)
 
     idx = np.arange(S)
+    exp_lam = E_log_beta(lam)[None, :, :]
 
     with tqdm(total=S, position=2, leave=None, desc="BATCH") as pbar:
 
         while True:
-            phi_t = softmax(E_log_theta(gamma) + E_log_beta(lam)[None, :, :], axis=1)
+            phi_t = softmax(E_log_theta(gamma) + exp_lam, axis=1)
 
             gamma_t = alpha + phi_t @ n_t[idx, :, :]
 
@@ -78,7 +74,7 @@ def E_step(lam, alpha, n_t, tol=1e-5):
 
             if idx.size != 0:
                 if all(~cv_flag):
-                    gamma = np.copy(gamma_t)
+                    gamma = gamma_t
                 else:
                     # save
                     to_save = idx[cv_flag]
@@ -90,7 +86,7 @@ def E_step(lam, alpha, n_t, tol=1e-5):
 
                     pbar.update(n=cv_flag.sum())
             else:
-                phi_save = softmax(E_log_theta(gamma_save) + E_log_beta(lam)[None, :, :], axis=1)
+                phi_save = softmax(E_log_theta(gamma_save) + exp_lam, axis=1)
                 return phi_save, gamma_save
 
 def M_step(lam, eta, D, phi_t, n_t, rho_t):

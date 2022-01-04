@@ -1,5 +1,4 @@
-import spacy
-
+import textacy
 import numpy as np
 
 from preprocessing.doc_preprocessing import normalize
@@ -8,9 +7,10 @@ from collections import Counter
 
 class Doc:
 
-    def __init__(self, doc_path, nlp):
+    def __init__(self, doc_path, nlp, bigrams_min_freq):
         self.doc_path = doc_path
         self.nlp = nlp
+        self.bigrams_min_freq = bigrams_min_freq
         self.token_freq = self.get_counts_dict()
 
     def get_counts_array(self, tok2idx):
@@ -40,8 +40,12 @@ class Doc:
 
     def get_normalized_tokens(self):
         my_text = self.read_doc()
-        tokens = normalize(my_text, self.nlp)
-        return tokens
+        unigrams = normalize(my_text, self.nlp)
+
+        bigrams = [token.text for token in
+                   textacy.extract.basics.ngrams(self.nlp(" ".join(unigrams)), 2, min_freq=self.bigrams_min_freq)]
+
+        return unigrams + bigrams
 
     def read_doc(self):
         with open(self.doc_path, 'r', encoding='utf-8', errors='ignore') as f:

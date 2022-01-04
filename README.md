@@ -27,26 +27,41 @@ All hyperparameters and paths are centralised in a single configuration file tha
 Ideally, each file should correspond to a single experiment.
 ````
 [data_paths]
-train = /path/to/20news-bydate-train
-test = /path/to/20news-bydate-test
+train = ./20news-bydate-train
+dev = ./20news-bydate-test
 
-[experiment]
-experiment_name = experiment
+[nlp]
+name = en_core_web_lg
+disable = ["parser", "ner"]
+
+[annotation]
+n_process = 2
+batch_size = 1000
+lemmatize = False
+pos_filter = ["NOUN", "ADJ"]
+
+[mlflow_params]
+exp_dir = /models/topic_models/experiments
+experiment_name = topic-model
 
 [corpus_params]
+corpus_dir = /datasets/corpus
 freq_cutoff = 1
+bigrams_min_freq = 2
+limit_train=0
+limit_test=0
 
 [model_params]
-seed = 0
+seed = 123
 alpha = 0.05
 eta = 0.05
-K = [15, 20, 50]
-batch_size_range = [1, 4, 16, 32, 64, 256]
-tau_0_range = [64, 256, 1024]
+K = [10, 15, 20, 50]
+batch_size_range = [1, 4, 16, 32, 64, 128, 256]
+# downweighting of early iterations
+tau_0_range = [64, 128, 256, 1024]
+# learning rate of variational inference (should be in (0.5, 1])
 kappa_range = [0.5, 0.6, 0.7, 0.8, 0.9]
-
-[model_paths]
-model_dir = /path/to/topic_models
+tfidf_threshold = 0.3
 ````
 
 ## MLflow
@@ -68,4 +83,4 @@ http://localhost:5000
 ## Sources
 - [Online Learning for Latent Dirichlet Allocation (Hoffman, Blei, Bach, 2010)](https://www.di.ens.fr/~fbach/mdhnips2010.pdf)
 - [Latent Dirichlet Allocation (Blei, Ng, Jordan, 2003)](https://www.jmlr.org/papers/volume3/blei03a/blei03a.pdf)
-
+- [Stochastic Variational Inference](https://www.jmlr.org/papers/volume14/hoffman13a/hoffman13a.pdf)
