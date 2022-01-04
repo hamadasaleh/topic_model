@@ -150,21 +150,4 @@ class Corpus:
                         if self.limit >= 1 and i >= self.limit:
                             break
 
-if __name__ == '__main__':
-    corpus_dir = Path("C:/Users/hamad/Documents/datasets/corpus")
-    docbin_path = corpus_dir / "train.spacy"
 
-    nlp = spacy.load(corpus_dir / "nlp.spacy")
-
-    custom_vocab_path = corpus_dir / 'vocab.pkl'
-    with open(custom_vocab_path, 'rb') as f:
-        custom_vocab = dill.load(f)
-
-    corpus = Corpus(path=corpus_dir, custom_vocab=custom_vocab)
-
-    # I would like for a generator to return batch of data
-    # instead of single instances
-    batch_size = 256
-    batches = corpus(nlp, batch_size)
-    for eg in batches:
-        print('Serve batch to topic model for training')
