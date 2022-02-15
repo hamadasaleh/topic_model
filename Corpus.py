@@ -1,16 +1,12 @@
 import warnings
 from typing import Union, Iterator, Iterable, List
 
-import spacy
-
 import numpy as np
 
 from pathlib import Path
 
 from spacy import Language
 from spacy.tokens import DocBin, Doc
-
-import dill
 
 from CustomVocab import CustomVocab
 
@@ -117,7 +113,7 @@ class Corpus:
                     # get document term frequencies
                     counts_dict = value
                     # compute tf-idf scores
-                    tfidf_scores = tfidf(doc_freq=counts_dict, doc_pres_freq=self.custom_vocab.doc_pres_freq,
+                    tfidf_scores = tfidf(doc_freq=counts_dict, bool_doc_freq=self.custom_vocab.bool_doc_freq,
                                          corpus_size=self.custom_vocab.corpus_size)
                     # filter document tokens based on tfidf threshold
                     filtered_counts = filter_counts(counts_dict=counts_dict, kind='tf-idf', tfidf_scores=tfidf_scores,

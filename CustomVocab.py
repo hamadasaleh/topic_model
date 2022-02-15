@@ -6,12 +6,12 @@ def idf(df: int, n: int):
     return idf
 
 class CustomVocab:
-    def __init__(self, corpus_size: int, corpus_freq: dict, doc_pres_freq: dict, freq_cutoff: int, nlp: "Language",
-                 tf_idf: "DataFrame" = None,
-                 max_vocab: int = None):
+    def __init__(self, corpus_size: int, corpus_freq: dict, bool_doc_freq: dict, bool_doc_pair_freq: dict,
+                 freq_cutoff: int, nlp: "Language", tf_idf: "DataFrame" = None, max_vocab: int = None):
         self.corpus_size = corpus_size
         self.corpus_freq = corpus_freq
-        self.doc_pres_freq = doc_pres_freq
+        self.bool_doc_freq = bool_doc_freq
+        self.bool_doc_pair_freq = bool_doc_pair_freq
         self.freq_cutoff = freq_cutoff
         self.stop_words = self.get_stop_words(freq_cutoff=freq_cutoff)
         self.add_stop_words(nlp=nlp, stop_words=self.stop_words)

@@ -5,7 +5,7 @@ import numpy as np
 
 from scipy.stats import dirichlet
 
-from model.LDA.online_var_bayes import online_var_bayes, E_step
+from model.LDA.online_var_bayes import online_var_bayes, multi_E_step
 from metrics.metrics_perplexity import doc_diff, perplexity
 
 
@@ -15,19 +15,30 @@ class TopicModel:
     def __init__(self,
                  K: int,
                  W: int,
-                 alpha: Union[float, np.array],
-                 eta: Union[float, np.array],
                  tau_0: float,
                  kappa: float,
                  D: int,
+                 alpha: Union[float, np.array] = None,
+                 eta: Union[float, np.array] = None,
                  lam: np.array = None,
                  batch_size: int = 1,
+                 n_cores: int = 2,
+                 update_priors: bool = False,
+                 n_epochs: int = 1,
                  seed: int = 0):
         self.seed = seed
         self.K = K
         self.W = W
-        self.alpha = alpha
-        self.eta = eta
+        if alpha is None:
+            self.alpha = 1. / K
+        else:
+            self.alpha = alpha
+        self.alpha_prior = self.alpha
+        if eta is None:
+            self.eta = 1. / W
+        else:
+            self.eta = eta
+        self.eta_prior = self.eta
         self.tau_0 = tau_0
         self.kappa = kappa
         self.D = D
@@ -42,20 +53,26 @@ class TopicModel:
             self.lam = lam
             self.q_beta_hat = None
         self.batch_size = batch_size
+        self.n_cores = n_cores
+        self.update_priors = update_priors
+        self.n_epochs = n_epochs
         super().__init__()
 
 
     def fit(self, train_corpus: "Corpus", nlp: "Language"):
         batches = train_corpus(nlp, self.batch_size)
-        self.lam = online_var_bayes(batches=batches,
-                                    D=self.D,
-                                    W=self.W,
-                                    K=self.K,
-                                    alpha=self.alpha,
-                                    eta=self.eta,
-                                    tau_0=self.tau_0,
-                                    kappa=self.kappa)
-        # posterior distribution of the topics
+        self.lam, self.alpha, self.eta = online_var_bayes(batches=batches,
+                                            D=self.D,
+                                            W=self.W,
+                                            K=self.K,
+                                            alpha=self.alpha,
+                                            eta=self.eta,
+                                            tau_0=self.tau_0,
+                                            kappa=self.kappa,
+                                            n_cores=self.n_cores,
+                                            update_priors=self.update_priors,
+                                            n_epochs=self.n_epochs)
+        # posterior distribution of topics
         self.q_beta_hat = self.get_q_beta_hat()
 
     def predict_corpus(self, corpus: "Corpus", nlp: "Language") -> Tuple[List[List], List[dirichlet]]:
@@ -98,7 +115,7 @@ class TopicModel:
         return diff, n_sum
 
     def fit_doc_params(self, n_t: np.array):
-        phi_t, gamma_t = E_step(lam=self.lam, alpha=self.alpha, n_t=n_t)
+        phi_t, gamma_t = multi_E_step(n_t=n_t, lam=self.lam, alpha=self.alpha, n_cores=self.n_cores)
         return phi_t, gamma_t
 
     def get_q_beta_hat(self):
