@@ -26,9 +26,10 @@ $ python train.py --config /path/to/config.ini
 All hyperparameters and paths are centralised in a single configuration file that should be modified to taste.
 Ideally, each file should correspond to a single experiment.
 ````
-[data_paths]
-train = ./20news-bydate-train
-dev = ./20news-bydate-test
+[dataset_params]
+dataset_name = 20news-bydate
+train_path = ./20news-bydate-train
+dev_path = ./20news-bydate-test
 
 [nlp]
 name = en_core_web_lg
@@ -45,7 +46,7 @@ exp_dir = /models/topic_models/experiments
 experiment_name = topic-model
 
 [corpus_params]
-corpus_dir = /datasets/corpus
+corpus_dir = /datasets/spacy_corpora
 freq_cutoff = 1
 bigrams_min_freq = 2
 limit_train=0
@@ -53,8 +54,9 @@ limit_test=0
 
 [model_params]
 seed = 123
-alpha = 0.05
-eta = 0.05
+n_cores = 7
+n_epochs = 1
+update_priors = True
 K = [10, 15, 20, 50]
 batch_size_range = [1, 4, 16, 32, 64, 128, 256]
 # downweighting of early iterations
