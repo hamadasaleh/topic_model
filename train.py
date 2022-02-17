@@ -81,7 +81,6 @@ if __name__ == '__main__':
     tau_0_range = [float(tau_0) for tau_0 in json.loads(model_params['tau_0_range'])]
 
 
-
     for K in n_topics:
         for S in batch_size_range:
             for kappa in kappa_range:
